@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Availability Calendar</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { 
+            margin: 0; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; 
+            background: #f9fafb;
+        }
+        .icon { 
+            width: 1.25rem; 
+            height: 1.25rem; 
+            display: inline-block; 
+            stroke: currentColor; 
+            fill: none; 
+            stroke-width: 2; 
+            stroke-linecap: round; 
+            stroke-linejoin: round; 
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Icon components
+        const Calendar = () => (
+            <svg className="icon" viewBox="0 0 24 24">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+        );
+
+        const Clock = () => (
+            <svg className="icon" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12,6 12,12 16,14"></polyline>
+            </svg>
+        );
+
+        const Users = () => (
+            <svg className="icon" viewBox="0 0 24 24">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+        );
+
+        const Plus = () => (
+            <svg className="icon" viewBox="0 0 24 24">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+        );
+
+        const Download = () => (
+            <svg className="icon" viewBox="0 0 24 24">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7,10 12,15 17,10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+        );
+
+        const Filter = () => (
+            <svg className="icon" viewBox="0 0 24 24">
+                <polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46"></polygon>
+            </svg>
+        );
+
+        const ChevronLeft = () => (
+            <svg className="icon" viewBox="0 0 24 24">
+                <polyline points="15,18 9,12 15,6"></polyline>
+            </svg>
+        );
+
+        const ChevronRight = () => (
+            <svg className="icon" viewBox="0 0 24 24">
+                <polyline points="9,18 15,12 9,6"></polyline>
+            </svg>
+        );
+
+        const TeamAvailabilityCalendar = () => {
+            const [currentDate, setCurrentDate] = useState(new Date());
+            const [selectedDate, setSelectedDate] = useState(new Date());
+            const [teamMembers, setTeamMembers] = useState([
+                { id: 1, name: 'Alice Johnson', email: 'alice@company.com', role: 'Developer', color: '#3B82F6' },
+                { id: 2, name: 'Bob Smith', email: 'bob@company.com', role: 'Designer', color: '#10B981' },
+                { id: 3, name: 'Carol Davis', email: 'carol@company.com', role: 'QA Engineer', color: '#F59E0B' },
+                { id: 4, name: 'David Wilson', email: 'david@company.com', role: 'Project Manager', color: '#EF4444' }
+            ]);
+            
+            const [availability, setAvailability] = useState({});
+            const [showAddMember, setShowAddMember] = useState(false);
+            const [newMember, setNewMember] = useState({ name: '', email: '', role: '', customRole: '' });
+            const [selectedMember, setSelectedMember] = useState('all');
+
+            const timeSlots = [
+                '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+                '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+                '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
+            ];
+
+            const availabilityTypes = {
+                available: { label: 'Available', color: 'bg-green-500', textColor: 'text-white' },
+                busy: { label: 'Busy', color: 'bg-red-500', textColor: 'text-white' },
+                meeting: { label: 'Meeting', color: 'bg-blue-500', textColor: 'text-white' },
+                break: { label: 'Break', color: 'bg-yellow-500', textColor: 'text-black' },
+                unavailable: { label: 'Unavailable', color: 'bg-gray-500', textColor: 'text-white' }
+            };
+
+            const getDaysInMonth = (date) => {
+                const year = date.getFullYear();
+                const month = date.getMonth();
+                const firstDay = new Date(year, month, 1);
+                const lastDay = new Date(year, month + 1, 0);
+                const daysInMonth = lastDay.getDate();
+                const startDate = firstDay.getDay();
+                
+                const days = [];
+                
+                // Previous month's days
+                for (let i = startDate - 1; i >= 0; i--) {
+                    const prevDate = new Date(year, month, -i);
+                    days.push({ date: prevDate, isCurrentMonth: false });
+                }
+                
+                // Current month's days
+                for (let day = 1; day <= daysInMonth; day++) {
+                    days.push({ date: new Date(year, month, day), isCurrentMonth: true });
+                }
+                
+                // Next month's days to fill the grid
+                const remainingDays = 42 - days.length;
+                for (let day = 1; day <= remainingDays; day++) {
+                    days.push({ date: new Date(year, month + 1, day), isCurrentMonth: false });
+                }
+                
+                return days;
+            };
+
+            const formatDate = (date) => {
+                return date.toISOString().split('T')[0];
+            };
+
+            const addTeamMember = () => {
+                if (newMember.name && newMember.email && newMember.role) {
+                    const colors = ['#8B5CF6', '#06B6D4', '#84CC16', '#F97316', '#EC4899', '#6366F1', '#14B8A6', '#F59E0B', '#EF4444', '#8B5A2B'];
+                    const newId = Date.now(); // Use timestamp for unique ID
+                    const finalRole = newMember.role === 'Other' ? newMember.customRole : newMember.role;
+                    
+                    setTeamMembers([...teamMembers, {
+                        id: newId,
+                        name: newMember.name,
+                        email: newMember.email,
+                        role: finalRole,
+                        color: colors[teamMembers.length % colors.length]
+                    }]);
+                    setNewMember({ name: '', email: '', role: '', customRole: '' });
+                    setShowAddMember(false);
+                }
+            };
+
+            const updateAvailability = (memberId, date, timeSlot, type) => {
+                const key = `${memberId}-${date}-${timeSlot}`;
+                setAvailability(prev => ({
+                    ...prev,
+                    [key]: type
+                }));
+            };
+
+            const getAvailability = (memberId, date, timeSlot) => {
+                const key = `${memberId}-${date}-${timeSlot}`;
+                return availability[key] || 'unavailable';
+            };
+
+            const exportToCSV = () => {
+                const csvData = [];
+                const headers = ['Date', 'Time', 'Team Member', 'Status'];
+                csvData.push(headers.join(','));
+
+                teamMembers.forEach(member => {
+                    timeSlots.forEach(slot => {
+                        const dateStr = formatDate(selectedDate);
+                        const status = getAvailability(member.id, dateStr, slot);
+                        csvData.push(`${dateStr},${slot},${member.name},${availabilityTypes[status].label}`);
+                    });
+                });
+
+                const blob = new Blob([csvData.join('\n')], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `team-availability-${formatDate(selectedDate)}.csv`;
+                a.click();
+            };
+
+            const navigateMonth = (direction) => {
+                setCurrentDate(prev => {
+                    const newDate = new Date(prev);
+                    if (direction === 'prev') {
+                        newDate.setMonth(prev.getMonth() - 1);
+                    } else {
+                        newDate.setMonth(prev.getMonth() + 1);
+                    }
+                    return newDate;
+                });
+            };
+
+            const goToToday = () => {
+                const today = new Date();
+                setCurrentDate(today);
+                setSelectedDate(today);
+            };
+
+            const days = getDaysInMonth(currentDate);
+
+            return (
+                <div className="max-w-7xl mx-auto p-4 bg-gray-50 min-h-screen">
+                    {/* Header */}
+                    <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
+                        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                            <div className="flex items-center gap-3">
+                                <Calendar />
+                                <h1 className="text-xl font-bold text-gray-800">Team Availability Calendar</h1>
+                            </div>
+                            <div className="flex gap-2 flex-wrap">
+                                <button
+                                    onClick={goToToday}
+                                    className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm"
+                                >
+                                    Today
+                                </button>
+                                <button
+                                    onClick={exportToCSV}
+                                    className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                                >
+                                    <Download />
+                                    Export CSV
+                                </button>
+                                <button
+                                    onClick={() => setShowAddMember(!showAddMember)}
+                                    className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                                >
+                                    <Plus />
+                                    Add Member
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Add Member Form */}
+                        {showAddMember && (
+                            <div className="mb-4 p-3 bg-gray-100 rounded-lg">
+                                <h3 className="text-lg font-semibold mb-3">Add New Team Member</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <input
+                                        type="text"
+                                        placeholder="Full Name"
+                                        value={newMember.name}
+                                        onChange={(e) => setNewMember({...newMember, name: e.target.value})}
+                                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        required
+                                    />
+                                    <input
+                                        type="email"
+                                        placeholder="Email Address"
+                                        value={newMember.email}
+                                        onChange={(e) => setNewMember({...newMember, email: e.target.value})}
+                                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        required
+                                    />
+                                    <select
+                                        value={newMember.role}
+                                        onChange={(e) => setNewMember({...newMember, role: e.target.value})}
+                                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        required
+                                    >
+                                        <option value="">Select Role</option>
+                                        <option value="Developer">Developer</option>
+                                        <option value="Senior Developer">Senior Developer</option>
+                                        <option value="Frontend Developer">Frontend Developer</option>
+                                        <option value="Backend Developer">Backend Developer</option>
+                                        <option value="Full Stack Developer">Full Stack Developer</option>
+                                        <option value="Designer">Designer</option>
+                                        <option value="UI/UX Designer">UI/UX Designer</option>
+                                        <option value="QA Engineer">QA Engineer</option>
+                                        <option value="QA Lead">QA Lead</option>
+                                        <option value="Project Manager">Project Manager</option>
+                                        <option value="Scrum Master">Scrum Master</option>
+                                        <option value="Product Owner">Product Owner</option>
+                                        <option value="Business Analyst">Business Analyst</option>
+                                        <option value="DevOps Engineer">DevOps Engineer</option>
+                                        <option value="Team Lead">Team Lead</option>
+                                        <option value="Architect">Architect</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+                                {newMember.role === 'Other' && (
+                                    <div className="mt-3">
+                                        <input
+                                            type="text"
+                                            placeholder="Specify Role"
+                                            value={newMember.customRole || ''}
+                                            onChange={(e) => setNewMember({...newMember, customRole: e.target.value})}
+                                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full"
+                                        />
+                                    </div>
+                                )}
+                                <div className="mt-3 flex gap-2">
+                                    <button 
+                                        onClick={addTeamMember} 
+                                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                                        disabled={!newMember.name || !newMember.email || !newMember.role || (newMember.role === 'Other' && !newMember.customRole)}
+                                    >
+                                        Add Team Member
+                                    </button>
+                                    <button onClick={() => {
+                                        setShowAddMember(false);
+                                        setNewMember({ name: '', email: '', role: '', customRole: '' });
+                                    }} className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Calendar Navigation */}
+                        <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
+                            <div className="flex items-center gap-4">
+                                <button
+                                    onClick={() => navigateMonth('prev')}
+                                    className="p-2 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+                                >
+                                    <ChevronLeft />
+                                </button>
+                                <h2 className="text-xl font-semibold min-w-[200px] text-center">
+                                    {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                                </h2>
+                                <button
+                                    onClick={() => navigateMonth('next')}
+                                    className="p-2 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+                                >
+                                    <ChevronRight />
+                                </button>
+                            </div>
+                            
+                            <div className="flex items-center gap-3">
+                                <Filter />
+                                <select
+                                    value={selectedMember}
+                                    onChange={(e) => setSelectedMember(e.target.value)}
+                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="all">All Members</option>
+                                    {teamMembers.map(member => (
+                                        <option key={member.id} value={member.id}>{member.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Mini Calendar */}
+                        <div className="grid grid-cols-7 gap-1 mb-4">
+                            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                                <div key={day} className="p-2 text-center font-semibold text-gray-600 text-sm">
+                                    {day}
+                                </div>
+                            ))}
+                            {days.map((day, index) => (
+                                <button
+                                    key={index}
+                                    onClick={() => setSelectedDate(day.date)}
+                                    className={`p-2 text-center text-sm rounded hover:bg-blue-100 transition-colors ${
+                                        !day.isCurrentMonth ? 'text-gray-400' : 'text-gray-800'
+                                    } ${
+                                        formatDate(day.date) === formatDate(selectedDate) 
+                                            ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                                            : ''
+                                    } ${
+                                        formatDate(day.date) === formatDate(new Date()) 
+                                            ? 'border-2 border-blue-400' 
+                                            : ''
+                                    }`}
+                                >
+                                    {day.date.getDate()}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Availability Grid */}
+                    <div className="bg-white rounded-lg shadow-lg p-4">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Clock />
+                            <h2 className="text-xl font-semibold">
+                                Availability for {selectedDate.toLocaleDateString()}
+                            </h2>
+                        </div>
+
+                        {/* Legend */}
+                        <div className="flex flex-wrap gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
+                            {Object.entries(availabilityTypes).map(([key, type]) => (
+                                <div key={key} className="flex items-center gap-2">
+                                    <div className={`w-4 h-4 rounded ${type.color}`}></div>
+                                    <span className="text-sm font-medium">{type.label}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full border-collapse">
+                                <thead>
+                                    <tr>
+                                        <th className="p-2 text-left border-b-2 border-gray-200 font-semibold text-gray-700 sticky left-0 bg-white">Time</th>
+                                        {(selectedMember === 'all' ? teamMembers : teamMembers.filter(m => m.id === parseInt(selectedMember))).map(member => (
+                                            <th key={member.id} className="p-2 text-center border-b-2 border-gray-200 font-semibold text-gray-700 min-w-[140px]">
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <div 
+                                                        className="w-3 h-3 rounded-full" 
+                                                        style={{ backgroundColor: member.color }}
+                                                    ></div>
+                                                    <div>
+                                                        <div className="text-xs">{member.name}</div>
+                                                        <div className="text-xs text-gray-500">{member.role}</div>
+                                                    </div>
+                                                </div>
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {timeSlots.map(timeSlot => (
+                                        <tr key={timeSlot} className="border-b border-gray-100">
+                                            <td className="p-2 font-medium text-gray-700 border-r border-gray-200 sticky left-0 bg-white">
+                                                {timeSlot}
+                                            </td>
+                                            {(selectedMember === 'all' ? teamMembers : teamMembers.filter(m => m.id === parseInt(selectedMember))).map(member => {
+                                                const currentStatus = getAvailability(member.id, formatDate(selectedDate), timeSlot);
+                                                const statusType = availabilityTypes[currentStatus];
+                                                
+                                                return (
+                                                    <td key={member.id} className="p-1 text-center">
+                                                        <select
+                                                            value={currentStatus}
+                                                            onChange={(e) => updateAvailability(member.id, formatDate(selectedDate), timeSlot, e.target.value)}
+                                                            className={`w-full px-2 py-1 text-xs rounded border-0 ${statusType.color} ${statusType.textColor} cursor-pointer focus:ring-2 focus:ring-blue-500`}
+                                                        >
+                                                            {Object.entries(availabilityTypes).map(([key, type]) => (
+                                                                <option key={key} value={key}>{type.label}</option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                );
+                                            })}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Team Summary */}
+                        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                            <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                                <Users />
+                                Team Summary for {selectedDate.toLocaleDateString()}
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                                {Object.entries(availabilityTypes).map(([key, type]) => {
+                                    const count = timeSlots.reduce((acc, slot) => {
+                                        const membersWithStatus = teamMembers.filter(member => 
+                                            getAvailability(member.id, formatDate(selectedDate), slot) === key
+                                        ).length;
+                                        return acc + membersWithStatus;
+                                    }, 0);
+                                    
+                                    return (
+                                        <div key={key} className="bg-white p-2 rounded-lg shadow">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <div className={`w-3 h-3 rounded ${type.color}`}></div>
+                                                <span className="font-medium text-xs">{type.label}</span>
+                                            </div>
+                                            <div className="text-lg font-bold text-gray-800">{count}</div>
+                                            <div className="text-xs text-gray-500">slots</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Instructions */}
+                        <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                            <h3 className="text-sm font-semibold text-blue-800 mb-2">📋 How to use:</h3>
+                            <ul className="text-blue-700 text-xs space-y-1">
+                                <li>• Click on any date in the calendar to view/edit availability</li>
+                                <li>• Use dropdown menus to set each team member's status per time slot</li>
+                                <li>• Filter by specific team members or view all</li>
+                                <li>• Export data as CSV for reports or Jira integration</li>
+                                <li>• Navigate between months using arrow buttons</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<TeamAvailabilityCalendar />, document.getElementById('root'));
+    </script>
+</body>
+</html>
